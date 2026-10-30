@@ -314,22 +314,32 @@ private fun AppRail(
         modifier.fillMaxHeight().padding(horizontal = 3.dp, vertical = 4.dp)
     ) {
         items(apps, key = { it.key }) { app ->
-            AppRow(app, whitelist, { onTap(app) }, { onLong(app) }, launchCounts[app.packageName] ?: 0)
+            AppRow(app, whitelist, { onTap(app) }, { onLong(app) }, launchCounts[app.packageName] ?: 0, { /* package shown on initial touch */ })
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0) {
+private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0, touchedPackageCallback: () -> Unit) {
     val context = LocalContext.current
     val dim = app.isDisabled
     BoxWithConstraints(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onLong)
+        Modifier.fillMaxWidth()
+            .pointerInput(app.key) {
+                detectTapGestures(
+                    onPress = {
+                        touchedPackageCallback()
+                        tryAwaitRelease()
+                    },
+                    onTap = { onTap() },
+                    onLongPress = { onLong() }
+                )
+            }
             .padding(vertical = 7.dp, horizontal = 2.dp),
         contentAlignment = Alignment.Center
     ) {
-        val iconSize = maxWidth * 0.60f
+        val iconSize = maxWidth * 0.50f
         AndroidView(
             factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
             update = { view ->
