@@ -1,0 +1,1 @@
+# Keep Android framework components discovered from the manifest.\n-keep class com.nkjeff.puregallery.MainActivity { *; }\n
