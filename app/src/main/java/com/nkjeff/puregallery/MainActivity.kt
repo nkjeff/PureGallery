@@ -174,7 +174,17 @@ private fun GalleryScreen() {
                                 Icon(Icons.Default.Add, contentDescription = "管理标签", tint = Blue)
                             }
                         }
-                        Row(
+                        if (selected.isNotEmpty()) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("已选 ${selected.size} 项", color = Color.White, style = MaterialTheme.typography.titleSmall)
+                                Spacer(Modifier.weight(1f))
+                                TextButton(onClick = { showAssignLabels = true }) { Text("修改标签") }
+                                TextButton(onClick = { selected = emptySet() }) { Text("取消选择") }
+                            }
+                        } else Row(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
