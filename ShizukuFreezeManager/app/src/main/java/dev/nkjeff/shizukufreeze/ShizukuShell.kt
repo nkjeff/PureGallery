@@ -117,5 +117,5 @@ class ShizukuShell {
         run("am start --user ${app.userId} -n ${quote(component)}")
     }
 
-    private fun quote(value: String) = "'" + value.replace("'", "'\\\\''") + "'"
+    private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
 }
