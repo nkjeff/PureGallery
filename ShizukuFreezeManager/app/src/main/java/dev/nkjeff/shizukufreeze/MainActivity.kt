@@ -110,6 +110,7 @@ private fun FreezeApp() {
                         .filter { it.packageName != context.packageName && it.packageName != "android" }
                 }
                 apps = result
+                firstListState.scrollToItem(0)
                 usageAccess = hasUsageAccess(context)
                 launchCounts = if (usageAccess) withContext(Dispatchers.IO) { readLaunchCounts(context) } else emptyMap()
                 temporary = temporary.filter { key -> result.any { it.key == key && !it.isDisabled } }.toSet()
@@ -412,13 +413,18 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
             },
             modifier = Modifier.size(iconSize).align(Alignment.Center)
         )
-        Text(
-            app.userId.toString(),
-            color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 3.dp, bottom = 1.dp)
-        )
+        Box(
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .background(Color.Black, RoundedCornerShape(5.dp))
+                .padding(horizontal = 5.dp, vertical = 1.dp)
+        ) {
+            Text(
+                app.userId.toString(),
+                color = if (dim) Color(0xFF9AA3B1) else Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 
