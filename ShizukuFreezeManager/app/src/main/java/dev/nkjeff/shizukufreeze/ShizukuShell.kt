@@ -21,14 +21,8 @@ class ShizukuShell {
 
     fun run(command: String): String {
         check(available()) { "Shizuku 尚未授权" }
-        // Shizuku API 13.1.1+ marks newProcess private while retaining it for
-        // compatibility until API 14. Invoke the retained API reflectively.
-        // A future revision should migrate this shell bridge to UserService.
         val method = Shizuku::class.java.getDeclaredMethod(
-            "newProcess",
-            Array<String>::class.java,
-            Array<String>::class.java,
-            String::class.java
+            "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
         ).apply { isAccessible = true }
         val process = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
         val stdout = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
@@ -40,7 +34,7 @@ class ShizukuShell {
 
     fun scanUsers(): List<Int> {
         val output = run("pm list users")
-        return Regex("""UserInfo\{(\d+):""").findAll(output)
+        return Regex("""UserInfo\\{(\\d+):""").findAll(output)
             .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
             .distinct().toList().ifEmpty { listOf(0) }
     }
@@ -49,13 +43,61 @@ class ShizukuShell {
         val enabled = run("pm list packages --user $userId -3")
         val disabled = runCatching { run("pm list packages --user $userId -3 -d") }.getOrDefault("")
         val system = runCatching { run("pm list packages --user $userId -s") }.getOrDefault("")
-        fun parse(s: String) = Regex("""package:([^\s]+)""").findAll(s)
-            .map { it.groupValues[1] }.toSet()
+        fun parse(s: String) = Regex("""package:([^\\s]+)""").findAll(s).map { it.groupValues[1] }.toSet()
         val disabledSet = parse(disabled)
-        // Some vendor package managers include system stubs in the -3 result.
-        // Explicitly subtract the system package list to keep framework apps out.
         val thirdParty = (parse(enabled) + disabledSet) - parse(system) - "android"
         return thirdParty to (disabledSet intersect thirdParty)
+    }
+
+    /**
+     * Returns running third-party app instances as packageName@userId.
+     * Process UID is matched against Package Manager's per-user package UID list.
+     */
+    fun scanRunningInstances(): Set<String> {
+        val users = scanUsers()
+        val packageUidToKey = mutableMapOf<Int, MutableSet<String>>()
+        val packageNamesByUser = mutableMapOf<Int, Set<String>>()
+
+        for (userId in users) {
+            val (packages, disabled) = scanPackages(userId)
+            packageNamesByUser[userId] = packages - disabled
+            val output = runCatching {
+                run("cmd package list packages -U --user $userId")
+            }.getOrDefault("")
+            Regex("""package:([^\\s]+)\\s+uid:(\\d+)""").findAll(output).forEach { match ->
+                val pkg = match.groupValues[1]
+                val uid = match.groupValues[2].toIntOrNull() ?: return@forEach
+                if (pkg in packages && pkg !in disabled && pkg != "android") {
+                    packageUidToKey.getOrPut(uid) { mutableSetOf() }.add("$pkg@$userId")
+                }
+            }
+        }
+
+        val ps = runCatching { run("ps -A -o UID,NAME") }
+            .recoverCatching { run("ps -A") }
+            .getOrDefault("")
+        val running = mutableSetOf<String>()
+        val lines = ps.lineSequence().drop(1)
+        for (line in lines) {
+            val columns = line.trim().split(Regex("\\s+"))
+            if (columns.size < 2) continue
+            val uidText = columns[0]
+            val processName = columns.last()
+            val numericUid = uidText.toIntOrNull()
+            if (numericUid != null) {
+                packageUidToKey[numericUid]?.let { running.addAll(it) }
+                continue
+            }
+            // Fallback for Android's textual UIDs, e.g. u0_a123 / u10_a123.
+            val userId = Regex("""^u(\\d+)_""").find(uidText)?.groupValues?.get(1)?.toIntOrNull()
+            if (userId != null) {
+                val baseName = processName.substringBefore(':')
+                packageNamesByUser[userId].orEmpty().filter { pkg ->
+                    baseName == pkg || processName.startsWith("$pkg:")
+                }.forEach { running.add("$it@$userId") }
+            }
+        }
+        return running
     }
 
     fun freeze(app: AppInstance) {
@@ -67,7 +109,6 @@ class ShizukuShell {
     }
 
     fun launch(app: AppInstance) {
-        // Resolve in the target user first. Never fall back to the owner's profile.
         val resolved = run("cmd package resolve-activity --brief --user ${app.userId} ${quote(app.packageName)}")
         val component = resolved.lineSequence().map { it.trim() }
             .lastOrNull { it.contains("/") && !it.startsWith("priority=") }
@@ -76,5 +117,5 @@ class ShizukuShell {
         run("am start --user ${app.userId} -n ${quote(component)}")
     }
 
-    private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
+    private fun quote(value: String) = "'" + value.replace("'", "'\\\\''") + "'"
 }
