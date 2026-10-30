@@ -323,6 +323,7 @@ private fun FreezeApp() {
                     }
                 }
                 Text(touchedPackage ?: message, color = Muted, fontSize = 11.sp, maxLines = 2,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp))
                 if (!Shizuku.pingBinder()) {
                     Text("等待 Shizuku", color = Accent, fontSize = 11.sp, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
@@ -358,6 +359,8 @@ private fun MenuAction(label: String, icon: androidx.compose.ui.graphics.vector.
 private fun AppRail(
     apps: List<AppInstance>, whitelist: Set<String>, modifier: Modifier = Modifier,
     onTap: (AppInstance) -> Unit, onLong: (AppInstance) -> Unit,
+    onTouch: (AppInstance) -> Unit = {},
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     launchCounts: Map<String, Int> = emptyMap(), showUsagePermission: Boolean = false
 ) {
     val context = LocalContext.current
@@ -368,10 +371,10 @@ private fun AppRail(
         }
     }
     LazyColumn(
-        modifier.fillMaxHeight().padding(horizontal = 3.dp, vertical = 4.dp)
+        modifier.fillMaxHeight().padding(horizontal = 3.dp, vertical = 4.dp), state = listState
     ) {
         items(apps, key = { it.key }) { app ->
-            AppRow(app, whitelist, { onTap(app) }, { onLong(app) }, launchCounts[app.packageName] ?: 0, { /* package shown on initial touch */ })
+            AppRow(app, whitelist, { onTap(app) }, { onLong(app) }, launchCounts[app.packageName] ?: 0, { onTouch(app) })
         }
     }
 }
