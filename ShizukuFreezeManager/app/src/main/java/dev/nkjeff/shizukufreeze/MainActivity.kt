@@ -247,8 +247,7 @@ private fun FreezeApp() {
                                         .background(
                                             if (selectedLetter == letter) Color(0xFF42536B) else Color.Transparent,
                                             CircleShape
-                                        )
-                                        ,
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
