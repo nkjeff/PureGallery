@@ -1,6 +1,11 @@
 package dev.nkjeff.shizukufreeze
 
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
+import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.os.Build
+import android.os.Process
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.ImageView
@@ -95,10 +100,13 @@ private fun FreezeApp() {
                     }.distinctBy { it.key }.filter {
                         it.packageName != context.packageName && it.packageName != "android"
                     }
-                    Pair(found, shell.scanRunningInstances())
+                    val running = shell.scanRunningInstances()
+                    val counts = readLaunchCounts(context)
+                    Triple(found, running, counts)
                 }
                 allApps = result.first
                 runningApps = result.first.filter { it.key in result.second && !it.isDisabled && !it.isSystem }
+                launchCounts = result.third
                 selectedLetter = null
                 rightListState.scrollToItem(0)
                 message = "扫描完成：运行中 " + runningApps.size + " 个，已安装 " + allApps.size + " 个"
@@ -275,4 +283,21 @@ private fun pinyinKey(label: String): String {
 private fun pinyinInitial(label: String): String {
     val first = pinyinKey(label).firstOrNull() ?: return "#"
     return if (first.isLetter()) first.uppercaseChar().toString() else "#"
+}
+
+@Suppress("DEPRECATION")
+private fun readLaunchCounts(context: Context): Map<String, Int> {
+    if (Build.VERSION.SDK_INT < 29) return emptyMap()
+    val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+    val mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+    if (mode != AppOpsManager.MODE_ALLOWED) return emptyMap()
+    val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+    val end = System.currentTimeMillis()
+    val start = end - 30L * 24L * 60L * 60L * 1000L
+    return runCatching {
+        manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+            .orEmpty()
+            .groupBy { it.packageName }
+            .mapValues { (_, records) -> records.sumOf { it.appLaunchCount } }
+    }.getOrDefault(emptyMap())
 }
