@@ -46,11 +46,16 @@ class ShizukuShell {
     }
 
     fun scanPackages(userId: Int): Pair<Set<String>, Set<String>> {
-        val enabled = runCatching { run("pm list packages --user $userId -3") }.getOrDefault("")
+        val enabled = run("pm list packages --user $userId -3")
         val disabled = runCatching { run("pm list packages --user $userId -3 -d") }.getOrDefault("")
+        val system = runCatching { run("pm list packages --user $userId -s") }.getOrDefault("")
         fun parse(s: String) = Regex("""package:([^\s]+)""").findAll(s)
             .map { it.groupValues[1] }.toSet()
-        return parse(enabled) + parse(disabled) to parse(disabled)
+        val disabledSet = parse(disabled)
+        // Some vendor package managers include system stubs in the -3 result.
+        // Explicitly subtract the system package list to keep framework apps out.
+        val thirdParty = (parse(enabled) + disabledSet) - parse(system) - "android"
+        return thirdParty to (disabledSet intersect thirdParty)
     }
 
     fun freeze(app: AppInstance) {
