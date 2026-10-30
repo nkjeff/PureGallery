@@ -208,12 +208,12 @@ private fun FreezeApp() {
                         AppRail(tempApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
                             touchedPackage = it.packageName
                             operate(it, "freeze")
-                        })
+                        }, onTouch = { touchedPackage = it.packageName })
                         AppRail(letterApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
                             touchedPackage = it.packageName
                             whitelist = if (it.key in whitelist) whitelist - it.key else whitelist + it.key
                             temporary = temporary - it.key
-                        })
+                        }, onTouch = { touchedPackage = it.packageName })
                     }
                     Column(
                         Modifier.align(Alignment.CenterStart)
