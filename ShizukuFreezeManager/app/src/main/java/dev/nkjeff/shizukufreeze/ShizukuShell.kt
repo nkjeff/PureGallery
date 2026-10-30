@@ -40,7 +40,7 @@ class ShizukuShell {
 
     fun scanUsers(): List<Int> {
         val output = run("pm list users")
-        return Regex("""UserInfo\\{(\\d+):""").findAll(output)
+        return Regex("""UserInfo\{(\d+):""").findAll(output)
             .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
             .distinct().toList().ifEmpty { listOf(0) }
     }
@@ -48,7 +48,7 @@ class ShizukuShell {
     fun scanPackages(userId: Int): Pair<Set<String>, Set<String>> {
         val enabled = runCatching { run("pm list packages --user $userId -3") }.getOrDefault("")
         val disabled = runCatching { run("pm list packages --user $userId -3 -d") }.getOrDefault("")
-        fun parse(s: String) = Regex("""package:([^\\s]+)""").findAll(s)
+        fun parse(s: String) = Regex("""package:([^\s]+)""").findAll(s)
             .map { it.groupValues[1] }.toSet()
         return parse(enabled) + parse(disabled) to parse(disabled)
     }
