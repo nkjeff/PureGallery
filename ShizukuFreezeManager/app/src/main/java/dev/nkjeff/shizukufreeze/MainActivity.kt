@@ -15,12 +15,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,8 +34,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
-private val Bg = Color(0xFF0D1118)
-private val Panel = Color(0xFF171E29)
+private val Bg = Color.Black
+private val Panel = Color(0xFF555B65)
 private val Muted = Color(0xFF8793A5)
 private val Accent = Color(0xFF9BBCEB)
 
@@ -64,7 +61,6 @@ private fun FreezeApp() {
     var apps by remember { mutableStateOf(emptyList<AppInstance>()) }
     var message by remember { mutableStateOf("请连接并授权 Shizuku") }
     var busy by remember { mutableStateOf(false) }
-    var sortRecent by remember { mutableStateOf(false) }
     var selectedLetter by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<AppInstance?>(null) }
     var whitelist by remember { mutableStateOf(setOf<String>()) }
@@ -142,15 +138,11 @@ private fun FreezeApp() {
     val manualApps = apps.filter { it.key in pinned }
     val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
     val remaining = apps.filter { it.key !in pinned && it.key !in temporary }
-    val sortedRemaining = if (sortRecent) {
-        remaining.sortedByDescending { app ->
-            runCatching { context.packageManager.getPackageInfo(app.packageName, PackageManager.MATCH_DISABLED_COMPONENTS).firstInstallTime }.getOrDefault(0L)
-        }
-    } else remaining.sortedBy { it.label.lowercase() }
-    val letters = sortedRemaining.map { it.label.firstOrNull()?.uppercaseChar()?.toString() ?: "#" }.distinct().sorted()
-    val letterApps = selectedLetter?.let { letter ->
-        sortedRemaining.filter { (it.label.firstOrNull()?.uppercaseChar()?.toString() ?: "#") == letter }
-    }.orEmpty()
+    val sortedRemaining = remaining.sortedBy { it.label.lowercase() }
+    val letters = ('A'..'Z').map { it.toString() }
+    val letterApps = if (selectedLetter == null) sortedRemaining else sortedRemaining.filter {
+        it.label.firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
+    }
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = Panel, primary = Accent,
@@ -182,54 +174,31 @@ private fun FreezeApp() {
                             refresh()
                         }
                     }
-                    IconButton(
-                        onClick = { sortRecent = !sortRecent; selectedLetter = null },
-                        enabled = !busy,
-                        modifier = Modifier.weight(0.65f).height(48.dp).background(Panel, RoundedCornerShape(12.dp))
-                    ) {
-                        Icon(if (sortRecent) Icons.Default.Schedule else Icons.Default.SortByAlpha,
-                            contentDescription = if (sortRecent) "按最近安装排序" else "按首字母排序",
-                            tint = Accent)
-                    }
+
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp).weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    AppRail(manualApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
-                    AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
+                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 6.dp)) {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                        AppRail(manualApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
+                        AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
+                        AppRail(letterApps, whitelist, Modifier.weight(1f).padding(start = 13.dp), { operate(it, "launch") }, { selected = it })
+                    }
                     Column(
-                        Modifier.weight(1.55f).fillMaxHeight()
-                            .background(Panel.copy(alpha = .55f), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                        Modifier.align(Alignment.CenterStart).offset(x = maxWidth * (2f / 3f) - 8.dp)
+                            .width(16.dp).fillMaxHeight().background(Color.Black.copy(alpha = .94f)),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        if (selectedLetter == null) {
-                            LazyColumn(horizontalAlignment = Alignment.CenterHorizontally) {
-                                items(letters) { letter ->
-                                    Text(
-                                        letter,
-                                        color = Accent,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.fillMaxWidth().combinedClickable(
-                                            onClick = { selectedLetter = letter },
-                                            onLongClick = { selectedLetter = letter }
-                                        ).padding(vertical = 5.dp)
-                                    )
-                                }
-                            }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { selectedLetter = null }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Default.ArrowBack, null, tint = Accent)
-                                }
-                                Text(selectedLetter!!, color = Accent, fontWeight = FontWeight.Bold)
-                            }
-                            LazyColumn {
-                                items(letterApps, key = { it.key }) { app ->
-                                    AppRow(app, whitelist, { operate(app, "launch") }, { selected = app })
-                                }
-                            }
+                        letters.forEach { letter ->
+                            Text(
+                                letter,
+                                color = if (selectedLetter == letter) Color.White else Muted,
+                                fontSize = 9.sp,
+                                fontWeight = if (selectedLetter == letter) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.fillMaxWidth().weight(1f).combinedClickable(
+                                    onClick = { selectedLetter = if (selectedLetter == letter) null else letter },
+                                    onLongClick = { selectedLetter = letter }
+                                )
+                            )
                         }
                     }
                 }
@@ -244,7 +213,7 @@ private fun FreezeApp() {
         }
         selected?.let { app ->
             Dialog(onDismissRequest = { selected = null }) {
-                Surface(shape = RoundedCornerShape(20.dp), color = Panel) {
+                Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), color = Color(0xFF555B65)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(app.label, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(app.packageName + " · 用户 " + app.userId, color = Muted, fontSize = 11.sp)
@@ -295,7 +264,7 @@ private fun AppRail(
     onTap: (AppInstance) -> Unit, onLong: (AppInstance) -> Unit
 ) {
     LazyColumn(
-        modifier.fillMaxHeight().background(Panel.copy(alpha = .55f), RoundedCornerShape(12.dp)).padding(horizontal = 3.dp, vertical = 4.dp)
+        modifier.fillMaxHeight().padding(horizontal = 3.dp, vertical = 4.dp)
     ) {
         items(apps, key = { it.key }) { app ->
             AppRow(app, whitelist, { onTap(app) }, { onLong(app) })
@@ -329,6 +298,7 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
         Column(Modifier.weight(1f)) {
             Text(app.label, color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
                 fontSize = 10.sp, maxLines = 2, lineHeight = 12.sp)
+            if (app.userId != 0) Text("用户" + app.userId.toString().padStart(2, '0'), color = Muted, fontSize = 8.sp, maxLines = 1)
             if (app.key in whitelist) Icon(Icons.Default.Lock, null, tint = Color(0xFFD6B56E), modifier = Modifier.size(10.dp))
         }
     }
