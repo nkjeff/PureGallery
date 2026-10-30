@@ -73,6 +73,8 @@ private fun FreezeApp() {
     var message by remember { mutableStateOf("请连接并授权 Shizuku") }
     var busy by remember { mutableStateOf(false) }
     var selectedLetter by remember { mutableStateOf<String?>(null) }
+    var selectedFirstLetter by remember { mutableStateOf<String?>(null)}
+    val firstListState = androidx.compose.foundation.lazy.rememberLazyListState()
     var whitelist by remember { mutableStateOf(setOf<String>()) }
     var pinned by remember { mutableStateOf(setOf<String>()) }
     var temporary by remember { mutableStateOf(setOf<String>()) }
@@ -153,7 +155,7 @@ private fun FreezeApp() {
     val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
     val sortedRemaining = apps.filter { it.key !in pinned && it.key !in temporary }.sortedBy { pinyinKey(it.label) }
     val letters = ('A'..'Z').map { it.toString() }
-    val letterApps = if (selectedLetter == null) sortedRemaining else sortedRemaining.filter {
+    val letterApps = if (selectedLetter == null) emptyList() else sortedRemaining.filter {
         pinyinInitial(it.label) == selectedLetter
     }
     val primaryApps = apps.filter { it.key !in temporary }.sortedWith(
@@ -161,6 +163,8 @@ private fun FreezeApp() {
             .thenByDescending { launchCounts[it.packageName] ?: 0 }
             .thenBy { pinyinKey(it.label) }
     )
+
+    val filteredPrimaryApps = if (selectedFirstLetter == null) primaryApps else primaryApps.filter { pinyinInitial(it.label) == selectedFirstLetter }
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = Panel, primary = Accent,
@@ -196,7 +200,7 @@ private fun FreezeApp() {
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 6.dp)) {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                        AppRail(primaryApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
+                        AppRail(filteredPrimaryApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
                             touchedPackage = it.packageName
                             pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
                             temporary = temporary - it.key
@@ -364,8 +368,10 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
 
  
 private fun pinyinKey(label: String): String {
+    val digitPinyin = mapOf('0' to "ling", '1' to "yi", '2' to "er", '3' to "san", '4' to "si", '5' to "wu", '6' to "liu", '7' to "qi", '8' to "ba", '9' to "jiu")
     return label.trim().lowercase().map { ch ->
-        if (ch.code in 0x4E00..0x9FFF) {
+        if (ch in '0'..'9') digitPinyin[ch] ?: ch.toString()
+        else if (ch.code in 0x4E00..0x9FFF) {
             PinyinHelper.toHanyuPinyinStringArray(ch)?.firstOrNull()?.lowercase() ?: ch.toString()
         } else ch.toString()
     }.joinToString("")
