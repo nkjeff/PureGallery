@@ -12,13 +12,21 @@ android {
         applicationId = "com.nkjeff.puregallery"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildTypes {
         debug {
-            isMinifyEnabled = false
+            // Keep the normal Android debug signing config, while shrinking code.
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = true
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
         release {
             isMinifyEnabled = true
@@ -30,12 +38,12 @@ android {
         }
     }
 
-    // Produce compact device-specific APKs instead of one universal APK.
+    // This project targets arm64-v8a only.
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a")
+            include("arm64-v8a")
             isUniversalApk = false
         }
     }
