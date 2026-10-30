@@ -34,7 +34,7 @@ class ShizukuShell {
 
     fun scanUsers(): List<Int> {
         val output = run("pm list users")
-        return Regex("""UserInfo\\{(\\d+):""").findAll(output)
+        return Regex("""UserInfo\{(\d+):""").findAll(output)
             .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
             .distinct().toList().ifEmpty { listOf(0) }
     }
@@ -43,7 +43,7 @@ class ShizukuShell {
         val enabled = run("pm list packages --user $userId -3")
         val disabled = runCatching { run("pm list packages --user $userId -3 -d") }.getOrDefault("")
         val system = runCatching { run("pm list packages --user $userId -s") }.getOrDefault("")
-        fun parse(s: String) = Regex("""package:([^\\s]+)""").findAll(s).map { it.groupValues[1] }.toSet()
+        fun parse(s: String) = Regex("""package:([^\s]+)""").findAll(s).map { it.groupValues[1] }.toSet()
         val disabledSet = parse(disabled)
         val thirdParty = (parse(enabled) + disabledSet) - parse(system) - "android"
         return thirdParty to (disabledSet intersect thirdParty)
@@ -64,7 +64,7 @@ class ShizukuShell {
             val output = runCatching {
                 run("cmd package list packages -U --user $userId")
             }.getOrDefault("")
-            Regex("""package:([^\\s]+)\\s+uid:(\\d+)""").findAll(output).forEach { match ->
+            Regex("""package:([^\s]+)\s+uid:(\d+)""").findAll(output).forEach { match ->
                 val pkg = match.groupValues[1]
                 val uid = match.groupValues[2].toIntOrNull() ?: return@forEach
                 if (pkg in packages && pkg !in disabled && pkg != "android") {
@@ -79,7 +79,7 @@ class ShizukuShell {
         val running = mutableSetOf<String>()
         val lines = ps.lineSequence().drop(1)
         for (line in lines) {
-            val columns = line.trim().split(Regex("\\s+"))
+            val columns = line.trim().split(Regex("\s+"))
             if (columns.size < 2) continue
             val uidText = columns[0]
             val processName = columns.last()
@@ -89,7 +89,7 @@ class ShizukuShell {
                 continue
             }
             // Fallback for Android's textual UIDs, e.g. u0_a123 / u10_a123.
-            val userId = Regex("""^u(\\d+)_""").find(uidText)?.groupValues?.get(1)?.toIntOrNull()
+            val userId = Regex("""^u(\d+)_""").find(uidText)?.groupValues?.get(1)?.toIntOrNull()
             if (userId != null) {
                 val baseName = processName.substringBefore(':')
                 packageNamesByUser[userId].orEmpty().filter { pkg ->
@@ -117,5 +117,5 @@ class ShizukuShell {
         run("am start --user ${app.userId} -n ${quote(component)}")
     }
 
-    private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
+    private fun quote(value: String) = "'" + value.replace("'", "'\''") + "'"
 }
