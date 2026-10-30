@@ -94,11 +94,11 @@ private fun writeTagMap(context: android.content.Context, tags: Map<String, Set<
 @Composable
 private fun GalleryScreen() {
     val context = LocalContext.current
+    var selected by remember { mutableStateOf(setOf<String>()) }
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
     var media by remember { mutableStateOf(emptyList<MediaEntry>()) }
     var columns by remember { mutableIntStateOf(3) }
     var sortBySize by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf(setOf<String>()) }
     var customLabels by remember { mutableStateOf(readLabels(context)) }
     var tagMap by remember { mutableStateOf(readTagMap(context)) }
     var activeFilter by remember { mutableStateOf("全部") }
