@@ -148,13 +148,13 @@ private fun FreezeApp() {
     val manualApps = apps.filter { it.key in pinned }
     val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
     val remaining = apps.filter { it.key !in pinned && it.key !in temporary }
-    val sortedRemaining = remaining.sortedWith(compareBy<AppInstance> { pinyinInitial(it.label) }.thenBy { it.label.lowercase() })
+    val sortedRemaining = remaining.sortedBy { pinyinKey(it.label) }
     val letters = ('A'..'Z').map { it.toString() }
     val letterApps = if (selectedLetter == null) sortedRemaining else sortedRemaining.filter {
         pinyinInitial(it.label) == selectedLetter
     }
     val popularApps = apps.sortedWith(compareByDescending<AppInstance> { launchCounts[it.packageName] ?: 0 }
-        .thenBy { pinyinInitial(it.label) }.thenBy { it.label.lowercase() })
+        .thenBy { pinyinKey(it.label) })
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = Panel, primary = Accent,
@@ -328,12 +328,16 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
 }
 
  
+private fun pinyinKey(label: String): String {
+    return label.trim().lowercase().map { ch ->
+        if (ch.code in 0x4E00..0x9FFF) {
+            PinyinHelper.toHanyuPinyinStringArray(ch)?.firstOrNull()?.lowercase() ?: ch.toString()
+        } else ch.toString()
+    }.joinToString("")
+}
+
 private fun pinyinInitial(label: String): String {
-    val first = label.trim().firstOrNull() ?: return "#"
-    if (first.code in 0x4E00..0x9FFF) {
-        val pinyin = PinyinHelper.toHanyuPinyinStringArray(first)?.firstOrNull()?.firstOrNull()?.uppercaseChar()
-        return pinyin?.toString() ?: "#"
-    }
+    val first = pinyinKey(label).firstOrNull() ?: return "#"
     return if (first.isLetter()) first.uppercaseChar().toString() else "#"
 }
 
