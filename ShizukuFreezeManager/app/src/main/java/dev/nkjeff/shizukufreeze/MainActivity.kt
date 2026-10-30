@@ -129,6 +129,22 @@ private fun FreezeApp() {
         }
     }
 
+    DisposableEffect(Unit) {
+        val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == 1001) {
+                permissionRequested = false
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    message = "Shizuku 已授权，正在扫描…"
+                    refresh()
+                } else {
+                    message = "Shizuku 授权被拒绝，请点击刷新后重新授权"
+                }
+            }
+        }
+        Shizuku.addRequestPermissionResultListener(listener)
+        onDispose { Shizuku.removeRequestPermissionResultListener(listener) }
+    }
+
     LaunchedEffect(Unit) { refresh() }
 
     fun saveSet(key: String, value: Set<String>) {
