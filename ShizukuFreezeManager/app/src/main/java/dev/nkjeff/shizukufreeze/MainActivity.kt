@@ -74,32 +74,48 @@ private fun FreezeApp() {
     var temporary by remember { mutableStateOf(setOf<String>()) }
 
     fun refresh() {
+        if (busy) return
         scope.launch {
             busy = true
             message = "正在扫描用户与应用…"
-            val result = withContext(Dispatchers.IO) {
-                val users = shell.scanUsers()
-                users.flatMap { user ->
-                    val (packages, disabled) = shell.scanPackages(user)
-                    packages.mapNotNull { pkg ->
-                        try {
-                            val info = context.packageManager.getApplicationInfo(pkg, 0)
-                            val label = context.packageManager.getApplicationLabel(info).toString()
-                            AppInstance(pkg, user, label,
-                                (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                                pkg in disabled, user != 0)
-                        } catch (_: PackageManager.NameNotFoundException) {
-                            null
-                        }
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    check(Shizuku.pingBinder()) { "没有连接 Shizuku。请先启动 Shizuku 服务。" }
+                    check(Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                        "Shizuku 尚未授权。请点击页面上的「授予权限」。"
                     }
-                }.distinctBy { it.key }.filter { it.packageName != context.packageName }
+                    val users = shell.scanUsers()
+                    users.flatMap { user ->
+                        val (packages, disabled) = shell.scanPackages(user)
+                        packages.map { pkg ->
+                            val appInfo = runCatching {
+                                context.packageManager.getApplicationInfo(pkg, PackageManager.MATCH_DISABLED_COMPONENTS)
+                            }.getOrNull()
+                            val label = appInfo?.let {
+                                runCatching { context.packageManager.getApplicationLabel(it).toString() }.getOrNull()
+                            }?.takeIf { it.isNotBlank() } ?: pkg.substringAfterLast('.')
+                            AppInstance(
+                                pkg, user, label,
+                                appInfo?.let { (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 } ?: false,
+                                pkg in disabled, user != 0
+                            )
+                        }
+                    }.distinctBy { it.key }.filter { it.packageName != context.packageName }
+                }
+                apps = result
+                temporary = temporary.filter { key -> result.any { it.key == key && !it.isDisabled } }.toSet()
+                message = if (result.isEmpty()) {
+                    "扫描完成，但没有找到第三方应用。请检查 Shizuku 授权和系统命令结果。"
+                } else "识别到 ${result.size} 个应用实例"
+            } catch (e: Exception) {
+                message = "刷新失败：${e.message ?: e.javaClass.simpleName}"
+            } finally {
+                busy = false
             }
-            apps = result
-            temporary = temporary.filter { key -> result.any { it.key == key && !it.isDisabled } }.toSet()
-            message = "识别到 ${result.size} 个应用实例"
-            busy = false
         }
     }
+
+    LaunchedEffect(Unit) { refresh() }
 
     fun operate(app: AppInstance, action: String) {
         scope.launch {
@@ -165,17 +181,24 @@ private fun FreezeApp() {
                     OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(12.dp),
                         placeholder = { Text("搜索应用名称或包名") }, singleLine = true)
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("布局", color = Muted, fontSize = 12.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(4,5,6).forEach { n ->
-                            FilterChip(selected = columns == n, onClick = { columns = n }, label = { Text("${n}列") })
-                        }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(4, 5, 6).forEach { n ->
+                        FilterChip(
+                            selected = columns == n,
+                            onClick = { columns = n },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("${n}列", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                        )
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("首字母","启动次数","最近安装").forEach { s ->
-                        FilterChip(selected = sort == s, onClick = { sort = s }, label = { Text(s, fontSize = 11.sp) })
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("首字母", "启动次数", "最近安装").forEach { s ->
+                        FilterChip(
+                            selected = sort == s,
+                            onClick = { sort = s },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(s, modifier = Modifier.fillMaxWidth(), fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                        )
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
