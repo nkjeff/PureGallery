@@ -125,6 +125,7 @@ private fun FreezeApp() {
                             if (app.isDisabled) shell.unfreeze(app)
                             shell.launch(app)
                         }
+                        else -> error("未知操作")
                     }
                 }
             }
