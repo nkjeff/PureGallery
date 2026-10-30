@@ -78,6 +78,7 @@ private fun FreezeApp() {
     var temporary by remember { mutableStateOf(setOf<String>()) }
     var launchCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var usageAccess by remember { mutableStateOf(hasUsageAccess(context)) }
+    var touchedPackage by remember { mutableStateOf<String?>(null) }
 
     fun refresh() {
         if (busy) return
@@ -195,14 +196,17 @@ private fun FreezeApp() {
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 6.dp)) {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                        AppRail(primaryApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
+                        AppRail(primaryApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
+                            touchedPackage = it.packageName
                             pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
                             temporary = temporary - it.key
                         }, launchCounts = launchCounts, showUsagePermission = !usageAccess)
-                        AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
+                        AppRail(tempApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
+                            touchedPackage = it.packageName
                             operate(it, "freeze")
                         })
-                        AppRail(letterApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
+                        AppRail(letterApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
+                            touchedPackage = it.packageName
                             pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
                             temporary = temporary - it.key
                         })
@@ -261,7 +265,7 @@ private fun FreezeApp() {
                         }
                     }
                 }
-                Text(message, color = Muted, fontSize = 10.sp, maxLines = 2,
+                Text(touchedPackage ?: message, color = Muted, fontSize = 11.sp, maxLines = 2,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp))
                 if (!Shizuku.pingBinder()) {
                     Text("等待 Shizuku", color = Accent, fontSize = 11.sp, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
@@ -320,11 +324,12 @@ private fun AppRail(
 private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0) {
     val context = LocalContext.current
     val dim = app.isDisabled
-    Row(
+    BoxWithConstraints(
         Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onLong)
-            .padding(vertical = 5.dp, horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 7.dp, horizontal = 2.dp),
+        contentAlignment = Alignment.Center
     ) {
+        val iconSize = maxWidth * 0.60f
         AndroidView(
             factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
             update = { view ->
@@ -335,13 +340,15 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
                 view.setImageDrawable(drawable)
                 view.alpha = if (dim) .35f else 1f
             },
-            modifier = Modifier.size(34.dp)
+            modifier = Modifier.size(iconSize).align(Alignment.Center)
         )
-        Spacer(Modifier.width(4.dp))
-        Column(Modifier.weight(1f)) {
-            Text(app.userId.toString(), color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
-                fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Medium)
-        }
+        Text(
+            app.userId.toString(),
+            color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 3.dp, bottom = 1.dp)
+        )
     }
 }
 
