@@ -278,8 +278,7 @@ private fun GalleryScreen() {
             onApply = { chosen ->
                 val updated = tagMap.toMutableMap()
                 selected.forEach { key ->
-                    val existing = updated[key].orEmpty()
-                    updated[key] = existing + chosen
+                    if (chosen.isEmpty()) updated.remove(key) else updated[key] = chosen
                 }
                 tagMap = updated
                 writeTagMap(context, tagMap)
