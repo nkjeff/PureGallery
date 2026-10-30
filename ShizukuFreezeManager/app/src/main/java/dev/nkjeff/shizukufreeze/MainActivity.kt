@@ -196,7 +196,7 @@ private fun FreezeApp() {
                         AppRail(primaryApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
                             pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
                             temporary = temporary - it.key
-                        })
+                        }, launchCounts = launchCounts, showUsagePermission = !usageAccess)
                         AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
                             operate(it, if (it.isDisabled) "enable" else "freeze")
                         })
