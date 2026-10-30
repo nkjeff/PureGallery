@@ -124,6 +124,9 @@ private fun FreezeApp() {
     }
 
     LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(apps) {
+        if (apps.isNotEmpty()) firstListState.scrollToItem(0)
+    }
 
     fun operate(app: AppInstance, action: String) {
         if (busy) return
@@ -154,12 +157,14 @@ private fun FreezeApp() {
     }
 
     val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
-    val sortedRemaining = apps.filter { it.key !in pinned && it.key !in temporary }.sortedBy { pinyinKey(it.label) }
+    val sortedRemaining = apps.filter { it.key !in pinned }.sortedBy { pinyinKey(it.label) }
     val letters = ('A'..'Z').map { it.toString() }
-    val letterApps = if (selectedLetter == null) emptyList() else sortedRemaining.filter {
-        pinyinInitial(it.label) == selectedLetter
+    val letterApps = if (selectedLetter == null) {
+        sortedRemaining.filter { it.key in whitelist }
+    } else {
+        sortedRemaining.filter { pinyinInitial(it.label) == selectedLetter }
     }
-    val primaryApps = apps.filter { it.key !in temporary }.sortedWith(
+    val primaryApps = apps.sortedWith(
         compareByDescending<AppInstance> { it.key in pinned }
             .thenByDescending { launchCounts[it.packageName] ?: 0 }
             .thenBy { pinyinKey(it.label) }
@@ -178,7 +183,7 @@ private fun FreezeApp() {
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    TopAction("刷新", Icons.Default.Refresh, Modifier.weight(1f), enabled = !busy) { selectedFirstLetter = null; scope.launch { firstListState.animateScrollToItem(0) }; refresh() }
+                    TopAction("刷新", Icons.Default.Refresh, Modifier.weight(1f), enabled = !busy) { selectedFirstLetter = null; selectedLetter = null; scope.launch { firstListState.animateScrollToItem(0) }; refresh() }
                     TopAction("一键冻结", Icons.Default.AcUnit, Modifier.weight(1f), enabled = !busy) {
                         scope.launch {
                             busy = true
@@ -323,7 +328,7 @@ private fun FreezeApp() {
                         }
                     }
                 }
-                Text(touchedPackage ?: message, color = Muted, fontSize = 11.sp, maxLines = 2,
+                Text(touchedPackage ?: message, color = Muted, fontSize = 9.sp, maxLines = 2,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp))
                 if (!Shizuku.pingBinder()) {
@@ -385,7 +390,7 @@ private fun AppRail(
 private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0, touchedPackageCallback: () -> Unit) {
     val context = LocalContext.current
     val dim = app.isDisabled
-    BoxWithConstraints(
+    Column(
         Modifier.fillMaxWidth()
             .pointerInput(app.key) {
                 detectTapGestures(
@@ -398,9 +403,9 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
                 )
             }
             .padding(vertical = 7.dp, horizontal = 2.dp),
-        contentAlignment = Alignment.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val iconSize = maxWidth * 0.50f
+        val iconSize = with(androidx.compose.ui.platform.LocalDensity.current) { (this@Column.maxWidth * 0.50f) }
         AndroidView(
             factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
             update = { view ->
@@ -411,20 +416,14 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
                 view.setImageDrawable(drawable)
                 view.alpha = if (dim) .35f else 1f
             },
-            modifier = Modifier.size(iconSize).align(Alignment.Center)
+            modifier = Modifier.size(iconSize)
         )
-        Box(
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .background(Color.Black, RoundedCornerShape(5.dp))
-                .padding(horizontal = 5.dp, vertical = 1.dp)
-        ) {
-            Text(
-                app.userId.toString(),
-                color = if (dim) Color(0xFF9AA3B1) else Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+        Text(
+            app.userId.toString(),
+            color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
