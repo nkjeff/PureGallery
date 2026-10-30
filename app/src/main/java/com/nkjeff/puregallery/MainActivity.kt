@@ -16,7 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -239,12 +239,11 @@ private fun GalleryScreen() {
                         val key = item.uri.toString()
                         val isSelected = key in selected
                         Box(
-                            Modifier.fillMaxWidth().aspectRatio(1f).combinedClickable(
+                            Modifier.fillMaxWidth().aspectRatio(1f).clickable(
                                 onClick = {
                                     if (selected.isNotEmpty()) selected = if (isSelected) selected - key else selected + key
                                     else openMedia(item)
-                                },
-                                onLongClick = { selected = if (isSelected) selected - key else selected + key }
+                                }
                             )
                         ) {
                             AsyncImage(model = item.uri, contentDescription = item.name, modifier = Modifier.fillMaxSize())
