@@ -1,0 +1,30 @@
+name: Shizuku Freeze Manager APK
+
+on:
+  push:
+    branches: [ "feature/shizuku-freeze-manager" ]
+    paths:
+      - "ShizukuFreezeManager/**"
+      - ".github/workflows/shizuku-freeze-manager.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build debug APK
+        working-directory: ShizukuFreezeManager
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ShizukuFreezeManager-debug
+          path: ShizukuFreezeManager/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
