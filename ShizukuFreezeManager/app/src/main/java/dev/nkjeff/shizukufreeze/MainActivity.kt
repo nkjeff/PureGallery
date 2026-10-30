@@ -295,9 +295,16 @@ private fun readLaunchCounts(context: Context): Map<String, Int> {
     val end = System.currentTimeMillis()
     val start = end - 30L * 24L * 60L * 60L * 1000L
     return runCatching {
-        manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
-            .orEmpty()
-            .groupBy { it.packageName }
-            .mapValues { (_, records) -> records.sumOf { it.appLaunchCount } }
+        val events = manager.queryEvents(start, end)
+        val event = UsageStatsManager.Event()
+        val counts = mutableMapOf<String, Int>()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.eventType == UsageStatsManager.Event.ACTIVITY_RESUMED) {
+                val pkg = event.packageName ?: continue
+                counts[pkg] = (counts[pkg] ?: 0) + 1
+            }
+        }
+        counts
     }.getOrDefault(emptyMap())
 }
