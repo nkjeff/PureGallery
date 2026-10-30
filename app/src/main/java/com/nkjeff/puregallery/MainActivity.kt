@@ -11,11 +11,14 @@ import android.provider.MediaStore
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -23,6 +26,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +50,7 @@ private val Blue = Color(0xFF8AB4F8)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
         window.statusBarColor = android.graphics.Color.BLACK
         window.navigationBarColor = android.graphics.Color.BLACK
         if (Build.VERSION.SDK_INT >= 29) {
@@ -88,6 +94,7 @@ private fun writeTagMap(context: android.content.Context, tags: Map<String, Set<
 @Composable
 private fun GalleryScreen() {
     val context = LocalContext.current
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
     var media by remember { mutableStateOf(emptyList<MediaEntry>()) }
     var columns by remember { mutableIntStateOf(3) }
     var sortBySize by remember { mutableStateOf(false) }
@@ -145,23 +152,6 @@ private fun GalleryScreen() {
                 Surface(color = Black) {
                     Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (selected.isEmpty()) {
-                                Text("媒体", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                                TextButton(onClick = { sortBySize = !sortBySize; refresh() }) {
-                                    Text(if (sortBySize) "大小 ↓" else "时间 ↓")
-                                }
-                                TextButton(onClick = { showLabelManager = true }) { Text("管理标签") }
-                            } else {
-                                TextButton(onClick = { selected = emptySet() }) { Text("取消") }
-                                Text("已选 ${selected.size} 项", Modifier.weight(1f))
-                                TextButton(onClick = { selected = visibleMedia.map { it.uri.toString() }.toSet() }) { Text("全选") }
-                                TextButton(onClick = { showAssignLabels = true }) { Text("添加标签") }
-                            }
-                        }
-                        Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -172,6 +162,9 @@ private fun GalleryScreen() {
                                     label = { Text(label, maxLines = 1) },
                                     modifier = Modifier.padding(horizontal = 2.dp)
                                 )
+                            }
+                            IconButton(onClick = { showLabelManager = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "管理标签", tint = Blue)
                             }
                         }
                         Row(
@@ -187,6 +180,10 @@ private fun GalleryScreen() {
                                     label = { Text("${count}列") },
                                     modifier = Modifier.padding(end = 6.dp)
                                 )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { sortBySize = !sortBySize; refresh() }) {
+                                Text(if (sortBySize) "大小 ↓" else "时间 ↓")
                             }
                         }
                     }
