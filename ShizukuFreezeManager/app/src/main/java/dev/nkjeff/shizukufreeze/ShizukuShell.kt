@@ -21,7 +21,16 @@ class ShizukuShell {
 
     fun run(command: String): String {
         check(available()) { "Shizuku 尚未授权" }
-        val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+        // Shizuku API 13.1.1+ marks newProcess private while retaining it for
+        // compatibility until API 14. Invoke the retained API reflectively.
+        // A future revision should migrate this shell bridge to UserService.
+        val method = Shizuku::class.java.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java,
+            Array<String>::class.java,
+            String::class.java
+        ).apply { isAccessible = true }
+        val process = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
         val stdout = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
         val stderr = BufferedReader(InputStreamReader(process.errorStream)).use { it.readText() }
         val code = process.waitFor()
