@@ -4,6 +4,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
+import android.app.usage.UsageEvents
 import android.content.Intent
 import android.provider.Settings
 import android.os.Process
