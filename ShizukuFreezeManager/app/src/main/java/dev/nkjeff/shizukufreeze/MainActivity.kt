@@ -2,31 +2,19 @@ package dev.nkjeff.shizukufreeze
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.app.AppOpsManager
-import android.app.usage.UsageStatsManager
-import android.app.usage.UsageEvents
-import android.content.Intent
-import android.provider.Settings
-import android.os.Process
 import android.os.Bundle
 import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,10 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,7 +34,6 @@ import net.sourceforge.pinyin4j.PinyinHelper
 import rikka.shizuku.Shizuku
 
 private val Bg = Color.Black
-private val Panel = Color(0xFF555B65)
 private val Muted = Color(0xFF8793A5)
 private val Accent = Color(0xFF9BBCEB)
 
@@ -63,35 +50,34 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FreezeApp() {
     val context = LocalContext.current
     val shell = remember { ShizukuShell() }
     val scope = rememberCoroutineScope()
-    var apps by remember { mutableStateOf(emptyList<AppInstance>()) }
-    var message by remember { mutableStateOf("请连接并授权 Shizuku") }
-    var busy by remember { mutableStateOf(false) }
-    var selectedLetter by remember { mutableStateOf<String?>(null) }
-    var selectedFirstLetter by remember { mutableStateOf<String?>(null)}
-    val firstListState = androidx.compose.foundation.lazy.rememberLazyListState()
-    var whitelist by remember { mutableStateOf(setOf<String>()) }
-    var pinned by remember { mutableStateOf(setOf<String>()) }
-    var temporary by remember { mutableStateOf(setOf<String>()) }
+    val prefs = remember { context.getSharedPreferences("freeze_manager", 0) }
+    var allApps by remember { mutableStateOf(emptyList<AppInstance>()) }
+    var runningApps by remember { mutableStateOf(emptyList<AppInstance>()) }
+    var whitelist by remember { mutableStateOf(prefs.getStringSet("whitelist", emptySet())?.toSet() ?: emptySet()) }
+    var pinned by remember { mutableStateOf(prefs.getStringSet("pinned", emptySet())?.toSet() ?: emptySet()) }
     var launchCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    var usageAccess by remember { mutableStateOf(hasUsageAccess(context)) }
-    var touchedPackage by remember { mutableStateOf<String?>(null) }
+    var selectedLetter by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("请连接并授权 Shizuku") }
+    val rightListState = rememberLazyListState()
+    val letters = ('A'..'Z').map { it.toString() }
 
     fun refresh() {
         if (busy) return
         scope.launch {
             busy = true
-            message = "正在刷新…"
+            message = "正在扫描应用和后台进程…"
             try {
                 val result = withContext(Dispatchers.IO) {
                     check(Shizuku.pingBinder()) { "没有连接 Shizuku，请先启动 Shizuku 服务。" }
                     check(Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) { "Shizuku 尚未授权。" }
-                    shell.scanUsers().flatMap { user ->
+                    val found = shell.scanUsers().flatMap { user ->
                         val (packages, disabled) = shell.scanPackages(user)
                         packages.map { pkg ->
                             val info = runCatching {
@@ -106,17 +92,18 @@ private fun FreezeApp() {
                                 pkg in disabled, user != 0
                             )
                         }
-                    }.distinctBy { it.key }
-                        .filter { it.packageName != context.packageName && it.packageName != "android" }
+                    }.distinctBy { it.key }.filter {
+                        it.packageName != context.packageName && it.packageName != "android"
+                    }
+                    Pair(found, shell.scanRunningInstances())
                 }
-                apps = result
-                firstListState.scrollToItem(0)
-                usageAccess = hasUsageAccess(context)
-                launchCounts = if (usageAccess) withContext(Dispatchers.IO) { readLaunchCounts(context) } else emptyMap()
-                temporary = temporary.filter { key -> result.any { it.key == key && !it.isDisabled } }.toSet()
-                message = "已刷新 " + result.size + " 个应用"
+                allApps = result.first
+                runningApps = result.first.filter { it.key in result.second && !it.isDisabled && !it.isSystem }
+                selectedLetter = null
+                rightListState.scrollToItem(0)
+                message = "扫描完成：运行中 " + runningApps.size + " 个，已安装 " + allApps.size + " 个"
             } catch (e: Exception) {
-                message = "刷新失败：" + (e.message ?: e.javaClass.simpleName)
+                message = "扫描失败：" + (e.message ?: e.javaClass.simpleName)
             } finally {
                 busy = false
             }
@@ -124,346 +111,168 @@ private fun FreezeApp() {
     }
 
     LaunchedEffect(Unit) { refresh() }
-    LaunchedEffect(apps) {
-        if (apps.isNotEmpty()) firstListState.scrollToItem(0)
+
+    fun saveSet(key: String, value: Set<String>) {
+        prefs.edit().putStringSet(key, value.toSet()).apply()
+    }
+    fun toggleWhitelist(app: AppInstance) {
+        whitelist = if (app.key in whitelist) whitelist - app.key else whitelist + app.key
+        saveSet("whitelist", whitelist)
+        message = if (app.key in whitelist) "已加入白名单：" + app.label + "（用户 " + app.userId + "）" else "已移出白名单：" + app.label
+    }
+    fun togglePinned(app: AppInstance) {
+        pinned = if (app.key in pinned) pinned - app.key else pinned + app.key
+        saveSet("pinned", pinned)
+        message = if (app.key in pinned) "已置顶：" + app.label + "（用户 " + app.userId + "）" else "已取消置顶：" + app.label
     }
 
-    fun operate(app: AppInstance, action: String) {
-        if (busy) return
-        scope.launch {
-            busy = true
-            message = if (action == "freeze") "正在冻结…" else "正在解冻…"
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    when (action) {
-                        "freeze" -> shell.freeze(app)
-                        "enable" -> shell.unfreeze(app)
-                        "launch" -> {
-                            if (app.isDisabled) shell.unfreeze(app)
-                            shell.launch(app)
-                        }
-                        else -> error("未知操作")
-                    }
-                }
-            }
-            result.onSuccess {
-                if (action == "launch") temporary = temporary + app.key
-                if (action == "freeze") temporary = temporary - app.key
-            }
-            message = result.fold({ "操作成功，正在更新状态…" }, { "操作失败：" + it.message })
-            busy = false
-            if (result.isSuccess) refresh()
-        }
-    }
-
-    val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
-    val sortedRemaining = apps.filter { it.key !in pinned }.sortedBy { pinyinKey(it.label) }
-    val letters = ('A'..'Z').map { it.toString() }
-    val letterApps = if (selectedLetter == null) {
-        sortedRemaining.filter { it.key in whitelist }
-    } else {
-        sortedRemaining.filter { pinyinInitial(it.label) == selectedLetter }
-    }
-    val primaryApps = apps.sortedWith(
-        compareByDescending<AppInstance> { it.key in pinned }
+    val rightApps = allApps
+        .filter { selectedLetter == null || pinyinInitial(it.label) == selectedLetter }
+        .sortedWith(compareByDescending<AppInstance> { it.key in pinned }
             .thenByDescending { launchCounts[it.packageName] ?: 0 }
-            .thenBy { pinyinKey(it.label) }
-    )
-
-    val filteredPrimaryApps = if (selectedFirstLetter == null) primaryApps else primaryApps.filter { pinyinInitial(it.label) == selectedFirstLetter }
+            .thenBy { pinyinKey(it.label) })
 
     MaterialTheme(colorScheme = darkColorScheme(
-        background = Bg, surface = Panel, primary = Accent,
+        background = Bg, surface = Color(0xFF171B22), primary = Accent,
         onBackground = Color(0xFFE8EDF5), onSurface = Color(0xFFE8EDF5)
     )) {
         Scaffold(containerColor = Bg) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                Spacer(Modifier.height(26.dp))
+                Spacer(Modifier.height(27.dp))
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Modifier.weight(1f).fillMaxWidth().padding(horizontal = 5.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    TopAction("刷新", Icons.Default.Refresh, Modifier.weight(1f), enabled = !busy) { selectedFirstLetter = null; selectedLetter = null; scope.launch { firstListState.animateScrollToItem(0) }; refresh() }
-                    TopAction("一键冻结", Icons.Default.AcUnit, Modifier.weight(1f), enabled = !busy) {
-                        scope.launch {
-                            busy = true
-                            val targets = apps.filter {
-                                !it.isSystem && !it.isDisabled && it.key !in whitelist &&
-                                    it.packageName != context.packageName && it.packageName != "android"
-                            }
-                            val failures = withContext(Dispatchers.IO) {
-                                targets.mapNotNull { app ->
-                                    runCatching { shell.freeze(app) }.exceptionOrNull()?.let { app.label }
-                                }
-                            }
-                            temporary = temporary - targets.map { it.key }.toSet()
-                            message = "冻结完成：" + (targets.size - failures.size) + "/" + targets.size + "，失败 " + failures.size
-                            busy = false
-                            refresh()
-                        }
-                    }
-
-                }
-                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 6.dp)) {
-                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                        AppRail(filteredPrimaryApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
-                            touchedPackage = it.packageName
-                            pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
-                            temporary = temporary - it.key
-                        }, onTouch = { touchedPackage = it.packageName }, listState = firstListState, launchCounts = launchCounts, showUsagePermission = !usageAccess)
-                        AppRail(tempApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
-                            touchedPackage = it.packageName
-                            operate(it, "freeze")
-                        }, onTouch = { touchedPackage = it.packageName })
-                        AppRail(letterApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
-                            touchedPackage = it.packageName
-                            whitelist = if (it.key in whitelist) whitelist - it.key else whitelist + it.key
-                            temporary = temporary - it.key
-                        }, onTouch = { touchedPackage = it.packageName })
-                    }
-                    Column(
-                        Modifier.align(Alignment.CenterStart)
-                            .offset(x = maxWidth * (1f / 3f) - 14.dp)
-                            .width(28.dp).fillMaxHeight()
-                            .background(Color.Black.copy(alpha = .94f))
-                            .pointerInput(letters) {
-                                detectTapGestures { offset ->
-                                    val index = (offset.y / size.height * letters.size).toInt()
-                                        .coerceIn(0, letters.lastIndex)
-                                    selectedFirstLetter = letters[index]
-                                }
-                            }
-                            .pointerInput(letters) {
-                                detectVerticalDragGestures(
-                                    onDragStart = { offset ->
-                                        val index = (offset.y / size.height * letters.size).toInt()
-                                            .coerceIn(0, letters.lastIndex)
-                                        selectedFirstLetter = letters[index]
-                                    },
-                                    onVerticalDrag = { change, _ ->
-                                        val index = (change.position.y / size.height * letters.size).toInt()
-                                            .coerceIn(0, letters.lastIndex)
-                                        selectedFirstLetter = letters[index]
-                                        change.consume()
-                                    }
-                                )
-                            },
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        letters.forEach { letter ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth().weight(1f),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(22.dp)
-                                        .background(
-                                            if (selectedFirstLetter == letter) Color(0xFF42536B) else Color.Transparent,
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        letter,
-                                        color = if (selectedFirstLetter == letter) Color.White else Muted,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (selectedFirstLetter == letter) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        Text("运行中", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp), textAlign = TextAlign.Center)
+                        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 6.dp)) {
+                            items(runningApps, key = { it.key }) { app ->
+                                AppItem(app, app.key in whitelist, false, null,
+                                    onClick = { message = app.label + " · 用户 " + app.userId },
+                                    onLongClick = { toggleWhitelist(app) })
                             }
                         }
                     }
                     Column(
-                        Modifier.align(Alignment.CenterStart)
-                            .offset(x = maxWidth * (2f / 3f) - 14.dp)
-                            .width(28.dp).fillMaxHeight()
-                            .background(Color.Black.copy(alpha = .94f))
-                            .pointerInput(letters) {
-                                detectTapGestures { offset ->
-                                    val index = (offset.y / size.height * letters.size).toInt()
-                                        .coerceIn(0, letters.lastIndex)
-                                    selectedLetter = letters[index]
-                                }
-                            }
+                        Modifier.width(25.dp).fillMaxHeight().background(Color(0xFF080A0D))
                             .pointerInput(letters) {
                                 detectVerticalDragGestures(
-                                    onDragStart = { offset ->
-                                        val index = (offset.y / size.height * letters.size).toInt()
-                                            .coerceIn(0, letters.lastIndex)
-                                        selectedLetter = letters[index]
+                                    onDragStart = { pos ->
+                                        val i = (pos.y / size.height * letters.size).toInt().coerceIn(0, letters.lastIndex)
+                                        selectedLetter = letters[i]
                                     },
                                     onVerticalDrag = { change, _ ->
-                                        val index = (change.position.y / size.height * letters.size).toInt()
-                                            .coerceIn(0, letters.lastIndex)
-                                        selectedLetter = letters[index]
+                                        val i = (change.position.y / size.height * letters.size).toInt().coerceIn(0, letters.lastIndex)
+                                        selectedLetter = letters[i]
                                         change.consume()
                                     }
                                 )
-                            },
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            }
                     ) {
                         letters.forEach { letter ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth().weight(1f),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(22.dp)
-                                        .background(
-                                            if (selectedLetter == letter) Color(0xFF42536B) else Color.Transparent,
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        letter,
-                                        color = if (selectedLetter == letter) Color.White else Muted,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (selectedLetter == letter) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
+                            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text(letter, color = if (selectedLetter == letter) Color.White else Muted,
+                                    fontSize = 10.sp, fontWeight = if (selectedLetter == letter) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.background(if (selectedLetter == letter) Color(0xFF42536B) else Color.Transparent, CircleShape).padding(horizontal = 3.dp, vertical = 1.dp))
+                            }
+                        }
+                    }
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        Text("全部应用", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp), textAlign = TextAlign.Center)
+                        LazyColumn(state = rightListState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 6.dp)) {
+                            items(rightApps, key = { it.key }) { app ->
+                                AppItem(app, app.key in whitelist, app.key in pinned, launchCounts[app.packageName] ?: 0,
+                                    onClick = { message = app.label + " · 用户 " + app.userId },
+                                    onLongClick = { togglePinned(app) })
                             }
                         }
                     }
                 }
-                Text(touchedPackage ?: message, color = Muted, fontSize = 9.sp, maxLines = 2,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp))
-                if (!Shizuku.pingBinder()) {
-                    Text("等待 Shizuku", color = Accent, fontSize = 11.sp, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
-                } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                    TextButton(onClick = { Shizuku.requestPermission(1001) }) { Text("授予 Shizuku 权限") }
+                Text(message, color = Muted, fontSize = 10.sp, maxLines = 2, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            if (!busy) scope.launch {
+                                busy = true
+                                val targets = runningApps.filter { it.key !in whitelist && !it.isSystem && !it.isDisabled }
+                                val failures = withContext(Dispatchers.IO) {
+                                    targets.mapNotNull { app ->
+                                        runCatching { shell.freeze(app) }.exceptionOrNull()?.let { app.label + "(" + app.userId + ")" }
+                                    }
+                                }
+                                message = "一键停用完成：成功 " + (targets.size - failures.size) + "/" + targets.size +
+                                    if (failures.isEmpty()) "" else "；失败：" + failures.take(4).joinToString("、")
+                                busy = false
+                                refresh()
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp), enabled = !busy,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF394B62))
+                    ) { Text("一键停用", fontSize = 13.sp) }
+                    Button(
+                        onClick = { selectedLetter = null; refresh() },
+                        modifier = Modifier.weight(1f).height(48.dp), enabled = !busy,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF394B62))
+                    ) { Text("刷新", fontSize = 13.sp) }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun TopAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, modifier = modifier.height(48.dp), enabled = enabled, contentPadding = PaddingValues(4.dp)) {
-        Icon(icon, null, Modifier.size(17.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 12.sp, maxLines = 1)
-    }
-}
-
-@Composable
-private fun MenuAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Icon(icon, null)
-        Spacer(Modifier.width(12.dp))
-        Text(label)
-        Spacer(Modifier.weight(1f))
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppRail(
-    apps: List<AppInstance>, whitelist: Set<String>, modifier: Modifier = Modifier,
-    onTap: (AppInstance) -> Unit, onLong: (AppInstance) -> Unit,
-    onTouch: (AppInstance) -> Unit = {},
-    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
-    launchCounts: Map<String, Int> = emptyMap(), showUsagePermission: Boolean = false
+private fun AppItem(
+    app: AppInstance, whitelist: Boolean, pinned: Boolean, count: Int?,
+    onClick: () -> Unit, onLongClick: () -> Unit
 ) {
     val context = LocalContext.current
-    if (showUsagePermission) {
-        TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)) {
-            Text("开启使用情况访问", fontSize = 9.sp, color = Accent, lineHeight = 11.sp)
-        }
-    }
-    LazyColumn(
-        modifier.fillMaxHeight().padding(horizontal = 3.dp, vertical = 4.dp), state = listState
+    Row(
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 3.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        items(apps, key = { it.key }) { app ->
-            AppRow(app, whitelist, { onTap(app) }, { onLong(app) }, launchCounts[app.packageName] ?: 0, { onTouch(app) })
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0, touchedPackageCallback: () -> Unit) {
-    val context = LocalContext.current
-    val dim = app.isDisabled
-    BoxWithConstraints(
-        Modifier.fillMaxWidth()
-            .pointerInput(app.key) {
-                detectTapGestures(
-                    onPress = {
-                        touchedPackageCallback()
-                        tryAwaitRelease()
-                    },
-                    onTap = { onTap() },
-                    onLongPress = { onLong() }
-                )
-            }
-            .padding(vertical = 7.dp, horizontal = 2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        val iconSize = maxWidth * 0.50f
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            AndroidView(
-                factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
-                update = { view ->
-                    val drawable = runCatching {
-                        val info = context.packageManager.getApplicationInfo(app.packageName, PackageManager.MATCH_DISABLED_COMPONENTS)
-                        context.packageManager.getApplicationIcon(info)
-                    }.getOrNull()
-                    view.setImageDrawable(drawable)
-                    view.alpha = if (dim) .35f else 1f
-                },
-                modifier = Modifier.size(iconSize)
-            )
+        AndroidView(
+            factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+            update = { view ->
+                val drawable = runCatching {
+                    val info = context.packageManager.getApplicationInfo(app.packageName, PackageManager.MATCH_DISABLED_COMPONENTS)
+                    context.packageManager.getApplicationIcon(info)
+                }.getOrNull()
+                view.setImageDrawable(drawable)
+            },
+            modifier = Modifier.size(30.dp)
+        )
+        Spacer(Modifier.width(4.dp))
+        Column(Modifier.weight(1f)) {
+            Text(app.label, color = Color(0xFFE8EDF5), fontSize = 11.sp, maxLines = 2, lineHeight = 13.sp)
             Text(
-                app.userId.toString(),
-                color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
+                buildString {
+                    append("用户 " + app.userId)
+                    if (whitelist) append(" · 白名单")
+                    if (pinned) append(" · 置顶")
+                    if (count != null) append(" · " + count + "次")
+                },
+                color = if (whitelist) Color(0xFF91B8E8) else Muted,
+                fontSize = 9.sp, maxLines = 1
             )
         }
     }
 }
 
- 
 private fun pinyinKey(label: String): String {
     val digitPinyin = mapOf('0' to "ling", '1' to "yi", '2' to "er", '3' to "san", '4' to "si", '5' to "wu", '6' to "liu", '7' to "qi", '8' to "ba", '9' to "jiu")
     return label.trim().lowercase().map { ch ->
         if (ch in '0'..'9') digitPinyin[ch] ?: ch.toString()
-        else if (ch.code in 0x4E00..0x9FFF) {
-            PinyinHelper.toHanyuPinyinStringArray(ch)?.firstOrNull()?.lowercase() ?: ch.toString()
-        } else ch.toString()
+        else if (ch.code in 0x4E00..0x9FFF) PinyinHelper.toHanyuPinyinStringArray(ch)?.firstOrNull()?.lowercase() ?: ch.toString()
+        else ch.toString()
     }.joinToString("")
 }
 
 private fun pinyinInitial(label: String): String {
     val first = pinyinKey(label).firstOrNull() ?: return "#"
     return if (first.isLetter()) first.uppercaseChar().toString() else "#"
-}
-
-private fun hasUsageAccess(context: android.content.Context): Boolean {
-    val appOps = context.getSystemService(AppOpsManager::class.java)
-    return appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName) == AppOpsManager.MODE_ALLOWED
-}
-
-private fun readLaunchCounts(context: android.content.Context): Map<String, Int> {
-    val manager = context.getSystemService(UsageStatsManager::class.java)
-    val end = System.currentTimeMillis()
-    val start = end - 30L * 24L * 60L * 60L * 1000L
-    val events = manager.queryEvents(start, end)
-    val event = UsageEvents.Event()
-    val counts = mutableMapOf<String, Int>()
-    while (events.hasNextEvent()) {
-        events.getNextEvent(event)
-        if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-            event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
-            val pkg = event.packageName ?: continue
-            counts[pkg] = (counts[pkg] ?: 0) + 1
-        }
-    }
-    return counts
 }
