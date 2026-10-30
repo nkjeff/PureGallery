@@ -178,7 +178,14 @@ private fun FreezeApp() {
                         FilterChip(selected = sort == s, onClick = { sort = s }, label = { Text(s, fontSize = 11.sp) })
                     }
                 }
-                Text(message, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(message, color = Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    if (!Shizuku.pingBinder()) {
+                        Text("等待 Shizuku", color = Accent, fontSize = 11.sp)
+                    } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                        TextButton(onClick = { Shizuku.requestPermission(1001) }) { Text("授予权限", fontSize = 11.sp) }
+                    }
+                }
                 if (manualApps.isNotEmpty()) AppSection("手动置顶", manualApps, columns, whitelist, onClick = { operate(it, if (it.isDisabled) "launch" else "launch") }, onLong = { selected = it; menuExpanded = true })
                 if (tempApps.isNotEmpty()) AppSection("临时置顶", tempApps, columns, whitelist, onClick = { operate(it, "launch") }, onLong = { selected = it; menuExpanded = true })
                 if (manualApps.isNotEmpty() || tempApps.isNotEmpty()) HorizontalDivider(color = Color.White.copy(alpha = .75f), thickness = 1.dp)
