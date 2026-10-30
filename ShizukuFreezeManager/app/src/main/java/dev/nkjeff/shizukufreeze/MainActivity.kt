@@ -217,6 +217,59 @@ private fun FreezeApp() {
                     }
                     Column(
                         Modifier.align(Alignment.CenterStart)
+                            .offset(x = maxWidth * (1f / 3f) - 14.dp)
+                            .width(28.dp).fillMaxHeight()
+                            .background(Color.Black.copy(alpha = .94f))
+                            .pointerInput(letters) {
+                                detectTapGestures { offset ->
+                                    val index = (offset.y / size.height * letters.size).toInt()
+                                        .coerceIn(0, letters.lastIndex)
+                                    selectedFirstLetter = letters[index]
+                                }
+                            }
+                            .pointerInput(letters) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { offset ->
+                                        val index = (offset.y / size.height * letters.size).toInt()
+                                            .coerceIn(0, letters.lastIndex)
+                                        selectedFirstLetter = letters[index]
+                                    },
+                                    onVerticalDrag = { change, _ ->
+                                        val index = (change.position.y / size.height * letters.size).toInt()
+                                            .coerceIn(0, letters.lastIndex)
+                                        selectedFirstLetter = letters[index]
+                                        change.consume()
+                                    }
+                                )
+                            },
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        letters.forEach { letter ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(22.dp)
+                                        .background(
+                                            if (selectedFirstLetter == letter) Color(0xFF42536B) else Color.Transparent,
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        letter,
+                                        color = if (selectedFirstLetter == letter) Color.White else Muted,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selectedFirstLetter == letter) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Column(
+                        Modifier.align(Alignment.CenterStart)
                             .offset(x = maxWidth * (2f / 3f) - 14.dp)
                             .width(28.dp).fillMaxHeight()
                             .background(Color.Black.copy(alpha = .94f))
