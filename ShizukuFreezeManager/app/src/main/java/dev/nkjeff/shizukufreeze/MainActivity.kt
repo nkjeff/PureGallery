@@ -211,7 +211,7 @@ private fun FreezeApp() {
                         })
                         AppRail(letterApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
                             touchedPackage = it.packageName
-                            pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
+                            whitelist = if (it.key in whitelist) whitelist - it.key else whitelist + it.key
                             temporary = temporary - it.key
                         })
                     }
