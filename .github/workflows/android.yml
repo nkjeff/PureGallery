@@ -1,4 +1,4 @@
-name: Android APK
+name: Android Debug APK (arm64-v8a)
 
 on:
   push:
@@ -23,14 +23,22 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-      - name: Build optimized release APKs
-        run: gradle --no-daemon assembleRelease
-      - name: Show APK sizes
-        run: find app/build/outputs/apk/release -name '*.apk' -exec ls -lh {} \;
-      - name: Upload APKs
+      - name: Build signed, size-optimized arm64 debug APK
+        run: gradle --no-daemon assembleDebug
+      - name: Verify APK signature and size
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name '*arm64-v8a*.apk' -o -name 'app-debug.apk' | head -n 1)
+          test -n "$APK"
+          echo "APK: $APK"
+          ls -lh "$APK"
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --verbose "$APK"
+          SIZE=$(stat -c%s "$APK")
+          echo "APK_SIZE_BYTES=$SIZE"
+          test "$SIZE" -le 5242880 || { echo "APK exceeds 5 MiB"; exit 1; }
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: PureGallery-release
-          path: app/build/outputs/apk/release/*.apk
+          name: PureGallery-debug-arm64
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
