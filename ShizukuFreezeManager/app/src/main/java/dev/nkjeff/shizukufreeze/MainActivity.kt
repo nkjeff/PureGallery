@@ -2,6 +2,7 @@ package dev.nkjeff.shizukufreeze
 
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
+import android.app.usage.UsageEvents
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.os.Build
@@ -296,11 +297,11 @@ private fun readLaunchCounts(context: Context): Map<String, Int> {
     val start = end - 30L * 24L * 60L * 60L * 1000L
     return runCatching {
         val events = manager.queryEvents(start, end)
-        val event = UsageStatsManager.Event()
+        val event = UsageEvents.Event()
         val counts = mutableMapOf<String, Int>()
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
-            if (event.eventType == UsageStatsManager.Event.ACTIVITY_RESUMED) {
+            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
                 val pkg = event.packageName ?: continue
                 counts[pkg] = (counts[pkg] ?: 0) + 1
             }
