@@ -71,7 +71,6 @@ private fun FreezeApp() {
     var message by remember { mutableStateOf("请连接并授权 Shizuku") }
     var busy by remember { mutableStateOf(false) }
     var selectedLetter by remember { mutableStateOf<String?>(null) }
-    var selected by remember { mutableStateOf<AppInstance?>(null) }
     var whitelist by remember { mutableStateOf(setOf<String>()) }
     var pinned by remember { mutableStateOf(setOf<String>()) }
     var temporary by remember { mutableStateOf(setOf<String>()) }
@@ -148,16 +147,17 @@ private fun FreezeApp() {
         }
     }
 
-    val manualApps = apps.filter { it.key in pinned }
     val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
-    val remaining = apps.filter { it.key !in pinned && it.key !in temporary }
-    val sortedRemaining = remaining.sortedBy { pinyinKey(it.label) }
+    val sortedRemaining = apps.filter { it.key !in pinned && it.key !in temporary }.sortedBy { pinyinKey(it.label) }
     val letters = ('A'..'Z').map { it.toString() }
     val letterApps = if (selectedLetter == null) sortedRemaining else sortedRemaining.filter {
         pinyinInitial(it.label) == selectedLetter
     }
-    val popularApps = apps.sortedWith(compareByDescending<AppInstance> { launchCounts[it.packageName] ?: 0 }
-        .thenBy { pinyinKey(it.label) })
+    val primaryApps = apps.sortedWith(
+        compareByDescending<AppInstance> { it.key in pinned }
+            .thenByDescending { launchCounts[it.packageName] ?: 0 }
+            .thenBy { pinyinKey(it.label) }
+    )
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = Panel, primary = Accent,
@@ -193,11 +193,17 @@ private fun FreezeApp() {
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 6.dp)) {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                        AppRail(manualApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
-                        AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
-                        AppRail(letterApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
-                        AppRail(popularApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it },
-                            launchCounts = launchCounts, showUsagePermission = !usageAccess)
+                        AppRail(primaryApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
+                            pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
+                            temporary = temporary - it.key
+                        })
+                        AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
+                            operate(it, if (it.isDisabled) "enable" else "freeze")
+                        })
+                        AppRail(letterApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
+                            pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
+                            temporary = temporary - it.key
+                        })
                     }
                     Column(
                         Modifier.align(Alignment.CenterStart).offset(x = maxWidth * .5f - 8.dp)
@@ -241,30 +247,6 @@ private fun FreezeApp() {
                     Text("等待 Shizuku", color = Accent, fontSize = 11.sp, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
                 } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                     TextButton(onClick = { Shizuku.requestPermission(1001) }) { Text("授予 Shizuku 权限") }
-                }
-            }
-        }
-        selected?.let { app ->
-            Dialog(onDismissRequest = { selected = null }) {
-                Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), color = Color(0xFF555B65)) {
-                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(app.label, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(app.packageName + " · 用户 " + app.userId, color = Muted, fontSize = 11.sp)
-                        MenuAction(if (app.isDisabled) "解冻" else "冻结", Icons.Default.AcUnit) {
-                            val action = if (app.isDisabled) "enable" else "freeze"
-                            selected = null
-                            operate(app, action)
-                        }
-                        MenuAction(if (app.key in whitelist) "移出白名单" else "加入白名单", Icons.Default.Lock) {
-                            whitelist = if (app.key in whitelist) whitelist - app.key else whitelist + app.key
-                            selected = null
-                        }
-                        MenuAction(if (app.key in pinned) "取消置顶" else "手动置顶", Icons.Default.PushPin) {
-                            pinned = if (app.key in pinned) pinned - app.key else pinned + app.key
-                            temporary = temporary - app.key
-                            selected = null
-                        }
-                    }
                 }
             }
         }
