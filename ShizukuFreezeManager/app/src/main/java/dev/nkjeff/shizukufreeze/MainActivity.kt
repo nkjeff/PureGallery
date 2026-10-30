@@ -44,15 +44,9 @@ private val Muted = Color(0xFF8793A5)
 private val Accent = Color(0xFF9BBCEB)
 
 class MainActivity : ComponentActivity() {
-    private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, _ -> }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Shizuku.addRequestPermissionResultListener(permissionListener)
         setContent { FreezeApp() }
-    }
-    override fun onDestroy() {
-        Shizuku.removeRequestPermissionResultListener(permissionListener)
-        super.onDestroy()
     }
 }
 
@@ -70,12 +64,28 @@ private fun FreezeApp() {
     var launchCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var selectedLetter by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf("请连接并授权 Shizuku") }
+    var message by remember { mutableStateOf("请先启动 Shizuku") }
+    var permissionRequested by remember { mutableStateOf(false) }
     val rightListState = rememberLazyListState()
     val letters = ('A'..'Z').map { it.toString() }
 
     fun refresh() {
         if (busy) return
+        if (!Shizuku.pingBinder()) {
+            message = "Shizuku 服务未启动，请先打开 Shizuku 并启动服务"
+            return
+        }
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            if (!permissionRequested) {
+                permissionRequested = true
+                message = "正在请求 Shizuku 授权…"
+                Shizuku.requestPermission(1001)
+            } else {
+                message = "等待 Shizuku 授权，请在弹窗中点击允许"
+            }
+            return
+        }
+        permissionRequested = false
         scope.launch {
             busy = true
             message = "正在扫描应用和后台进程…"
