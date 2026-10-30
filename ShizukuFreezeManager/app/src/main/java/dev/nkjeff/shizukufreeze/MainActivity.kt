@@ -153,7 +153,7 @@ private fun FreezeApp() {
     val letterApps = if (selectedLetter == null) sortedRemaining else sortedRemaining.filter {
         pinyinInitial(it.label) == selectedLetter
     }
-    val primaryApps = apps.sortedWith(
+    val primaryApps = apps.filter { it.key !in temporary }.sortedWith(
         compareByDescending<AppInstance> { it.key in pinned }
             .thenByDescending { launchCounts[it.packageName] ?: 0 }
             .thenBy { pinyinKey(it.label) }
