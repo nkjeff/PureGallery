@@ -18,6 +18,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -105,6 +109,7 @@ private fun GalleryScreen() {
     var showLabelManager by remember { mutableStateOf(false) }
     var showAssignLabels by remember { mutableStateOf(false) }
     var permissionGranted by remember { mutableStateOf(hasMediaPermission(context)) }
+    val gridState = rememberLazyGridState()
 
     fun refresh() {
         val all = loadMedia(context)
@@ -150,7 +155,7 @@ private fun GalleryScreen() {
             containerColor = Black,
             topBar = {
                 Surface(color = Black) {
-                    Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
+                    Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(top = 4.dp, bottom = 8.dp)) {
                         Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -202,7 +207,30 @@ private fun GalleryScreen() {
                 }
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
-                    modifier = Modifier.fillMaxSize().padding(padding),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize().padding(padding).pointerInput(visibleMedia, columns) {
+                        var addMode = true
+                        fun selectAt(point: Offset) {
+                            val hit = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+                                point.x >= info.offset.x && point.x < info.offset.x + info.size.width &&
+                                    point.y >= info.offset.y && point.y < info.offset.y + info.size.height
+                            }
+                            val key = hit?.let { visibleMedia.getOrNull(it.index)?.uri?.toString() } ?: return
+                            selected = if (addMode) selected + key else selected - key
+                        }
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { point ->
+                                val hit = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+                                    point.x >= info.offset.x && point.x < info.offset.x + info.size.width &&
+                                        point.y >= info.offset.y && point.y < info.offset.y + info.size.height
+                                }
+                                val key = hit?.let { visibleMedia.getOrNull(it.index)?.uri?.toString() }
+                                addMode = key == null || key !in selected
+                                selectAt(point)
+                            },
+                            onDrag = { change, _ -> selectAt(change.position) }
+                        )
+                    },
                     contentPadding = PaddingValues(1.dp),
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -294,34 +322,60 @@ private fun LabelManagerDialog(
     var newName by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<String?>(null) }
     var editName by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("标签管理") },
-        text = {
-            Column(Modifier.heightIn(max = 420.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(newName, { newName = it }, modifier = Modifier.weight(1f), label = { Text("新标签名称") }, singleLine = true)
-                    TextButton(onClick = { onAdd(newName); newName = "" }) { Text("添加") }
-                }
-                Spacer(Modifier.height(8.dp))
-                labels.forEach { label ->
-                    if (editing == label) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(editName, { editName = it }, modifier = Modifier.weight(1f), singleLine = true)
-                            TextButton(onClick = { onRename(label, editName); editing = null }) { Text("保存") }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.48f)), contentAlignment = Alignment.TopCenter) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars).padding(top = 12.dp),
+                shape = MaterialTheme.shapes.large, color = Color(0xFF171717),
+                contentColor = Color.White, tonalElevation = 8.dp
+            ) {
+                Column(Modifier.padding(18.dp).heightIn(max = 560.dp)) {
+                    Text("标签管理", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = newName, onValueChange = { newName = it }, modifier = Modifier.weight(1f),
+                            label = { Text("新标签名称") }, singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                focusedBorderColor = Blue, unfocusedBorderColor = Color.Gray,
+                                focusedLabelColor = Blue, unfocusedLabelColor = Color.LightGray, cursorColor = Blue
+                            )
+                        )
+                        TextButton(onClick = { onAdd(newName); newName = "" }) { Text("添加") }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                        labels.forEach { label ->
+                            if (editing == label) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(
+                                        value = editName, onValueChange = { editName = it },
+                                        modifier = Modifier.weight(1f), singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                            focusedBorderColor = Blue, unfocusedBorderColor = Color.Gray, cursorColor = Blue
+                                        )
+                                    )
+                                    TextButton(onClick = { onRename(label, editName); editing = null }) { Text("保存") }
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(label, Modifier.weight(1f), color = Color.White)
+                                    TextButton(onClick = { editing = label; editName = label }) { Text("改名") }
+                                    TextButton(onClick = { onDelete(label) }) { Text("删除", color = Color(0xFFFF7777)) }
+                                }
+                            }
                         }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(label, Modifier.weight(1f))
-                            TextButton(onClick = { editing = label; editName = label }) { Text("改名") }
-                            TextButton(onClick = { onDelete(label) }) { Text("删除") }
-                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onDismiss) { Text("完成") }
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("完成") } }
-    )
+        }
+    }
 }
 
 @Composable
