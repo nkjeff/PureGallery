@@ -14,10 +14,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Lock
@@ -203,16 +205,32 @@ private fun FreezeApp() {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         letters.forEach { letter ->
-                            Text(
-                                letter,
-                                color = if (selectedLetter == letter) Color.White else Muted,
-                                fontSize = 9.sp,
-                                fontWeight = if (selectedLetter == letter) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.fillMaxWidth().weight(1f).combinedClickable(
-                                    onClick = { selectedLetter = if (selectedLetter == letter) null else letter },
-                                    onLongClick = { selectedLetter = letter }
-                                )
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(22.dp)
+                                        .background(
+                                            if (selectedLetter == letter) Color(0xFF42536B) else Color.Transparent,
+                                            CircleShape
+                                        )
+                                        .clickable(
+                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            selectedLetter = if (selectedLetter == letter) null else letter
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        letter,
+                                        color = if (selectedLetter == letter) Color.White else Muted,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selectedLetter == letter) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -321,7 +339,6 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
             Text(app.label, color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
                 fontSize = 10.sp, maxLines = 2, lineHeight = 12.sp)
             if (app.userId != 0) Text("用户" + app.userId.toString().padStart(2, '0'), color = Muted, fontSize = 8.sp, maxLines = 1)
-            if (launchCount > 0) Text("启动 " + launchCount, color = Muted, fontSize = 8.sp, maxLines = 1)
             if (app.key in whitelist) Icon(Icons.Default.Lock, null, tint = Color(0xFFD6B56E), modifier = Modifier.size(10.dp))
         }
     }
@@ -350,7 +367,16 @@ private fun readLaunchCounts(context: android.content.Context): Map<String, Int>
     val manager = context.getSystemService(UsageStatsManager::class.java)
     val end = System.currentTimeMillis()
     val start = end - 30L * 24L * 60L * 60L * 1000L
-    return manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
-        .orEmpty().groupBy { it.packageName }
-        .mapValues { (_, entries) -> entries.sumOf { it.appLaunchCount.coerceAtLeast(0) } }
+    val events = manager.queryEvents(start, end)
+    val event = UsageEvents.Event()
+    val counts = mutableMapOf<String, Int>()
+    while (events.hasNextEvent()) {
+        events.getNextEvent(event)
+        if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+            event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+            val pkg = event.packageName ?: continue
+            counts[pkg] = (counts[pkg] ?: 0) + 1
+        }
+    }
+    return counts
 }
