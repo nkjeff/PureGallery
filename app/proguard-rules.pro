@@ -1,1 +1,2 @@
-# Keep Android framework components discovered from the manifest.\n-keep class com.nkjeff.puregallery.MainActivity { *; }\n
+# AndroidX / Compose use consumer rules from their dependencies.
+-keep class com.nkjeff.puregallery.MainActivity { *; }
