@@ -79,7 +79,7 @@ class ShizukuShell {
         val running = mutableSetOf<String>()
         val lines = ps.lineSequence().drop(1)
         for (line in lines) {
-            val columns = line.trim().split(Regex("\s+"))
+            val columns = line.trim().split(Regex("""\s+"""))
             if (columns.size < 2) continue
             val uidText = columns[0]
             val processName = columns.last()
