@@ -390,7 +390,7 @@ private fun AppRail(
 private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0, touchedPackageCallback: () -> Unit) {
     val context = LocalContext.current
     val dim = app.isDisabled
-    Column(
+    BoxWithConstraints(
         Modifier.fillMaxWidth()
             .pointerInput(app.key) {
                 detectTapGestures(
@@ -403,27 +403,29 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
                 )
             }
             .padding(vertical = 7.dp, horizontal = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        contentAlignment = Alignment.Center
     ) {
-        val iconSize = with(androidx.compose.ui.platform.LocalDensity.current) { (this@Column.maxWidth * 0.50f) }
-        AndroidView(
-            factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
-            update = { view ->
-                val drawable = runCatching {
-                    val info = context.packageManager.getApplicationInfo(app.packageName, PackageManager.MATCH_DISABLED_COMPONENTS)
-                    context.packageManager.getApplicationIcon(info)
-                }.getOrNull()
-                view.setImageDrawable(drawable)
-                view.alpha = if (dim) .35f else 1f
-            },
-            modifier = Modifier.size(iconSize)
-        )
-        Text(
-            app.userId.toString(),
-            color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        val iconSize = maxWidth * 0.50f
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            AndroidView(
+                factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                update = { view ->
+                    val drawable = runCatching {
+                        val info = context.packageManager.getApplicationInfo(app.packageName, PackageManager.MATCH_DISABLED_COMPONENTS)
+                        context.packageManager.getApplicationIcon(info)
+                    }.getOrNull()
+                    view.setImageDrawable(drawable)
+                    view.alpha = if (dim) .35f else 1f
+                },
+                modifier = Modifier.size(iconSize)
+            )
+            Text(
+                app.userId.toString(),
+                color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 
