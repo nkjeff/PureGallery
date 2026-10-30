@@ -2,6 +2,11 @@ package dev.nkjeff.shizukufreeze
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
+import android.content.Intent
+import android.provider.Settings
+import android.os.Process
 import android.os.Bundle
 import android.widget.ImageView
 import androidx.activity.ComponentActivity
@@ -32,6 +37,7 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.sourceforge.pinyin4j.PinyinHelper
 import rikka.shizuku.Shizuku
 
 private val Bg = Color.Black
@@ -66,6 +72,8 @@ private fun FreezeApp() {
     var whitelist by remember { mutableStateOf(setOf<String>()) }
     var pinned by remember { mutableStateOf(setOf<String>()) }
     var temporary by remember { mutableStateOf(setOf<String>()) }
+    var launchCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var usageAccess by remember { mutableStateOf(hasUsageAccess(context)) }
 
     fun refresh() {
         if (busy) return
@@ -95,6 +103,8 @@ private fun FreezeApp() {
                         .filter { it.packageName != context.packageName && it.packageName != "android" }
                 }
                 apps = result
+                usageAccess = hasUsageAccess(context)
+                launchCounts = if (usageAccess) withContext(Dispatchers.IO) { readLaunchCounts(context) } else emptyMap()
                 temporary = temporary.filter { key -> result.any { it.key == key && !it.isDisabled } }.toSet()
                 message = "已刷新 " + result.size + " 个应用"
             } catch (e: Exception) {
@@ -138,11 +148,13 @@ private fun FreezeApp() {
     val manualApps = apps.filter { it.key in pinned }
     val tempApps = apps.filter { it.key in temporary && it.key !in pinned }
     val remaining = apps.filter { it.key !in pinned && it.key !in temporary }
-    val sortedRemaining = remaining.sortedBy { it.label.lowercase() }
+    val sortedRemaining = remaining.sortedWith(compareBy<AppInstance> { pinyinInitial(it.label) }.thenBy { it.label.lowercase() })
     val letters = ('A'..'Z').map { it.toString() }
     val letterApps = if (selectedLetter == null) sortedRemaining else sortedRemaining.filter {
-        it.label.firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
+        pinyinInitial(it.label) == selectedLetter
     }
+    val popularApps = apps.sortedWith(compareByDescending<AppInstance> { launchCounts[it.packageName] ?: 0 }
+        .thenBy { pinyinInitial(it.label) }.thenBy { it.label.lowercase() })
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = Panel, primary = Accent,
@@ -180,10 +192,12 @@ private fun FreezeApp() {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                         AppRail(manualApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
                         AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
-                        AppRail(letterApps, whitelist, Modifier.weight(1f).padding(start = 13.dp), { operate(it, "launch") }, { selected = it })
+                        AppRail(letterApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it })
+                        AppRail(popularApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, { selected = it },
+                            launchCounts = launchCounts, showUsagePermission = !usageAccess)
                     }
                     Column(
-                        Modifier.align(Alignment.CenterStart).offset(x = maxWidth * (2f / 3f) - 8.dp)
+                        Modifier.align(Alignment.CenterStart).offset(x = maxWidth * .5f - 8.dp)
                             .width(16.dp).fillMaxHeight().background(Color.Black.copy(alpha = .94f)),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -261,20 +275,28 @@ private fun MenuAction(label: String, icon: androidx.compose.ui.graphics.vector.
 @Composable
 private fun AppRail(
     apps: List<AppInstance>, whitelist: Set<String>, modifier: Modifier = Modifier,
-    onTap: (AppInstance) -> Unit, onLong: (AppInstance) -> Unit
+    onTap: (AppInstance) -> Unit, onLong: (AppInstance) -> Unit,
+    launchCounts: Map<String, Int> = emptyMap(), showUsagePermission: Boolean = false
 ) {
+    val context = LocalContext.current
+    if (showUsagePermission) {
+        TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)) {
+            Text("开启使用情况访问", fontSize = 9.sp, color = Accent, lineHeight = 11.sp)
+        }
+    }
     LazyColumn(
         modifier.fillMaxHeight().padding(horizontal = 3.dp, vertical = 4.dp)
     ) {
         items(apps, key = { it.key }) { app ->
-            AppRow(app, whitelist, { onTap(app) }, { onLong(app) })
+            AppRow(app, whitelist, { onTap(app) }, { onLong(app) }, launchCounts[app.packageName] ?: 0)
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit) {
+private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, onLong: () -> Unit, launchCount: Int = 0) {
     val context = LocalContext.current
     val dim = app.isDisabled
     Row(
@@ -299,7 +321,32 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
             Text(app.label, color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
                 fontSize = 10.sp, maxLines = 2, lineHeight = 12.sp)
             if (app.userId != 0) Text("用户" + app.userId.toString().padStart(2, '0'), color = Muted, fontSize = 8.sp, maxLines = 1)
+            if (launchCount > 0) Text("启动 " + launchCount, color = Muted, fontSize = 8.sp, maxLines = 1)
             if (app.key in whitelist) Icon(Icons.Default.Lock, null, tint = Color(0xFFD6B56E), modifier = Modifier.size(10.dp))
         }
     }
+}
+
+ 
+private fun pinyinInitial(label: String): String {
+    val first = label.trim().firstOrNull() ?: return "#"
+    if (first.code in 0x4E00..0x9FFF) {
+        val pinyin = PinyinHelper.toHanyuPinyinStringArray(first)?.firstOrNull()?.firstOrNull()?.uppercaseChar()
+        return pinyin?.toString() ?: "#"
+    }
+    return if (first.isLetter()) first.uppercaseChar().toString() else "#"
+}
+
+private fun hasUsageAccess(context: android.content.Context): Boolean {
+    val appOps = context.getSystemService(AppOpsManager::class.java)
+    return appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName) == AppOpsManager.MODE_ALLOWED
+}
+
+private fun readLaunchCounts(context: android.content.Context): Map<String, Int> {
+    val manager = context.getSystemService(UsageStatsManager::class.java)
+    val end = System.currentTimeMillis()
+    val start = end - 30L * 24L * 60L * 60L * 1000L
+    return manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+        .orEmpty().groupBy { it.packageName }
+        .mapValues { (_, entries) -> entries.sumOf { it.appLaunchCount.coerceAtLeast(0) } }
 }
