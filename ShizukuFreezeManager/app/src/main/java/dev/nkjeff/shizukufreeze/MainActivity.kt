@@ -177,7 +177,7 @@ private fun FreezeApp() {
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    TopAction("刷新", Icons.Default.Refresh, Modifier.weight(1f), enabled = !busy) { refresh() }
+                    TopAction("刷新", Icons.Default.Refresh, Modifier.weight(1f), enabled = !busy) { selectedFirstLetter = null; scope.launch { firstListState.animateScrollToItem(0) }; refresh() }
                     TopAction("一键冻结", Icons.Default.AcUnit, Modifier.weight(1f), enabled = !busy) {
                         scope.launch {
                             busy = true
@@ -204,7 +204,7 @@ private fun FreezeApp() {
                             touchedPackage = it.packageName
                             pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
                             temporary = temporary - it.key
-                        }, launchCounts = launchCounts, showUsagePermission = !usageAccess)
+                        }, onTouch = { touchedPackage = it.packageName }, listState = firstListState, launchCounts = launchCounts, showUsagePermission = !usageAccess)
                         AppRail(tempApps, whitelist, Modifier.weight(1f), { touchedPackage = it.packageName; operate(it, "launch") }, {
                             touchedPackage = it.packageName
                             operate(it, "freeze")
