@@ -14,8 +14,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -198,7 +200,7 @@ private fun FreezeApp() {
                             temporary = temporary - it.key
                         }, launchCounts = launchCounts, showUsagePermission = !usageAccess)
                         AppRail(tempApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
-                            operate(it, if (it.isDisabled) "enable" else "freeze")
+                            operate(it, "freeze")
                         })
                         AppRail(letterApps, whitelist, Modifier.weight(1f), { operate(it, "launch") }, {
                             pinned = if (it.key in pinned) pinned - it.key else pinned + it.key
@@ -206,8 +208,32 @@ private fun FreezeApp() {
                         })
                     }
                     Column(
-                        Modifier.align(Alignment.CenterStart).offset(x = maxWidth * .5f - 8.dp)
-                            .width(16.dp).fillMaxHeight().background(Color.Black.copy(alpha = .94f)),
+                        Modifier.align(Alignment.CenterStart)
+                            .offset(x = maxWidth * (2f / 3f) - 14.dp)
+                            .width(28.dp).fillMaxHeight()
+                            .background(Color.Black.copy(alpha = .94f))
+                            .pointerInput(letters) {
+                                detectTapGestures { offset ->
+                                    val index = (offset.y / size.height * letters.size).toInt()
+                                        .coerceIn(0, letters.lastIndex)
+                                    selectedLetter = letters[index]
+                                }
+                            }
+                            .pointerInput(letters) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { offset ->
+                                        val index = (offset.y / size.height * letters.size).toInt()
+                                            .coerceIn(0, letters.lastIndex)
+                                        selectedLetter = letters[index]
+                                    },
+                                    onVerticalDrag = { change, _ ->
+                                        val index = (change.position.y / size.height * letters.size).toInt()
+                                            .coerceIn(0, letters.lastIndex)
+                                        selectedLetter = letters[index]
+                                        change.consume()
+                                    }
+                                )
+                            },
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -222,12 +248,7 @@ private fun FreezeApp() {
                                             if (selectedLetter == letter) Color(0xFF42536B) else Color.Transparent,
                                             CircleShape
                                         )
-                                        .clickable(
-                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                            indication = null
-                                        ) {
-                                            selectedLetter = if (selectedLetter == letter) null else letter
-                                        },
+                                        ,
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -315,14 +336,12 @@ private fun AppRow(app: AppInstance, whitelist: Set<String>, onTap: () -> Unit, 
                 view.setImageDrawable(drawable)
                 view.alpha = if (dim) .35f else 1f
             },
-            modifier = Modifier.size(30.dp)
+            modifier = Modifier.size(34.dp)
         )
         Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
-            Text(app.label, color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
-                fontSize = 10.sp, maxLines = 2, lineHeight = 12.sp)
-            if (app.userId != 0) Text("用户" + app.userId.toString().padStart(2, '0'), color = Muted, fontSize = 8.sp, maxLines = 1)
-            if (app.key in whitelist) Icon(Icons.Default.Lock, null, tint = Color(0xFFD6B56E), modifier = Modifier.size(10.dp))
+            Text(app.userId.toString(), color = if (dim) Color(0xFF68717F) else Color(0xFFE5EAF2),
+                fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Medium)
         }
     }
 }
