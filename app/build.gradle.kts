@@ -14,11 +14,15 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "0.3.0"
+
+        // Hard limit native ABI packaging to 64-bit ARM only.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
         debug {
-            // Keep the normal Android debug signing config, while shrinking code.
             signingConfig = signingConfigs.getByName("debug")
             isDebuggable = true
             isMinifyEnabled = true
@@ -38,7 +42,7 @@ android {
         }
     }
 
-    // This project targets arm64-v8a only.
+    // Produce only the arm64-v8a APK split; no universal or other ABI APKs.
     splits {
         abi {
             isEnable = true
