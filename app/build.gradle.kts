@@ -14,11 +14,6 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "0.3.0"
-
-        // Hard limit native ABI packaging to 64-bit ARM only.
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
     }
 
     buildTypes {
@@ -42,7 +37,7 @@ android {
         }
     }
 
-    // Produce only the arm64-v8a APK split; no universal or other ABI APKs.
+    // ARM64-v8a is the only permitted APK split. No universal APK is generated.
     splits {
         abi {
             isEnable = true
